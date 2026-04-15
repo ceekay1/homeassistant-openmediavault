@@ -2,7 +2,7 @@
     "name": "OpenMediaVault",
     "homeassistant": "2022.2.0",
     "render_readme": false,
-    "zip_release": true,
+    "zip_release": false,
     "hide_default_branch": true,
     "filename": "openmediavault.zip"
 }
