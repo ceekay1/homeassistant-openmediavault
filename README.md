@@ -1,4 +1,4 @@
-# OpenMediaVault integration for Home Assistant (OMV API v7)
+# OpenMediaVault integration for Home Assistant (OMV7 API)
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/tomaae/homeassistant-openmediavault?style=plastic)
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=plastic)](https://github.com/hacs/integration)
 ![Project Stage](https://img.shields.io/badge/project%20stage-development-yellow.svg?style=plastic)
@@ -14,7 +14,7 @@
 
 ![OpenMediaVault Logo](https://raw.githubusercontent.com/tomaae/homeassistant-openmediavault/master/docs/assets/images/ui/header.png)
 
-Monitor your OpenMediaVault 5/6 NAS from Home Assistant.
+Monitor your OpenMediaVault NAS (OMV 7 only — OMV 5/6 are not supported) from Home Assistant.
 
 Features:
 * Filesystem usage sensors
@@ -69,3 +69,19 @@ logger:
   logs:
     custom_components.openmediavault: debug
 ```
+
+## OMV 7 API updates (breaking)
+
+This branch includes updates to support OpenMediaVault 7's API responses. IMPORTANT: these are breaking API changes. OpenMediaVault 5 and 6 are no longer supported by this branch — OMV7 is required.
+
+- What changed:
+  - `System.getInformation` now exposes fields such as `cpuUtilization`, `memUtilization`, `availablePkgUpdates`, `configDirty`, and `rebootRequired` which are mapped to the integration's `hwinfo` sensors.
+  - `diskmgmt.enumerateDevices` provides disk meta fields (e.g. `devicename`, `canonicaldevicefile`, `size`, `vendor`, `model`, `serialnumber`) used by disk and SMART sensors.
+  - `smart.getList` and `smart.getAttributes` return device SMART summaries and attribute lists (`attrname`, `threshold`, `rawvalue`) that are consumed by disk sensors.
+  - `services.getStatus` returns service objects with `name`, `title`, `enabled`, and `running` flags used by service sensors.
+
+- Developer notes / migration guidance:
+  - This is a breaking change: OMV 5 and 6 are not supported. Users must run OMV 7 to use this branch.
+  - After upgrading your NAS to OMV 7, reinstall or reconfigure the integration if sensors do not appear as expected.
+  - Inline RPC→field mapping comments were added to `custom_components/openmediavault/omv_controller.py` to document which OMV RPC responses populate which `self.data` fields.
+  - See the migration notes for detailed user steps: [Migration notes](docs/migration.md)
