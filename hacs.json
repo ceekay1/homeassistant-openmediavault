@@ -1,6 +1,6 @@
 {
     "name": "OpenMediaVault",
-    "homeassistant": "2022.2.0",
+    "homeassistant": "2025.1.0",
     "render_readme": false,
     "zip_release": true,
     "hide_default_branch": true,
