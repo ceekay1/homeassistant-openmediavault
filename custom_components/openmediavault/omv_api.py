@@ -18,22 +18,23 @@ _LOGGER = logging.getLogger(__name__)
 # ---------------------------
 #   load_cookies
 # ---------------------------
-def load_cookies(filename: str) -> Optional(dict):
-    """Load cookies from file."""
-    if path.isfile(filename):
-        with open(filename, "rb") as f:
-            return pickle_load(f)
-    return None
+#def load_cookies(filename: str) -> Optional(dict):
+#    """Load cookies from file."""
+#    if path.isfile(filename):
+#        with open(filename, "rb") as f:
+#            return pickle_load(f)
+#    return None
+# OMV7 fix
 
 
 # ---------------------------
 #   save_cookies
 # ---------------------------
-def save_cookies(filename: str, data: dict):
-    """Save cookies to file."""
-    with open(filename, "wb") as f:
-        pickle_dump(data, f)
-
+#def save_cookies(filename: str, data: dict):
+#    """Save cookies to file."""
+#    with open(filename, "wb") as f:
+#        pickle_dump(data, f)
+# OMV7 fix
 
 # ---------------------------
 #   OpenMediaVaultAPI
@@ -57,8 +58,9 @@ class OpenMediaVaultAPI(object):
         self.lock = Lock()
 
         self._connection = None
-        self._cookie_jar = None
-        self._cookie_jar_file = self._hass.config.path(".omv_cookies.json")
+#        self._cookie_jar = None
+#        self._cookie_jar_file = self._hass.config.path(".omv_cookies.json")
+# OMV7 fix
         self._connected = False
         self._reconnected = False
         self._connection_epoch = 0
@@ -83,7 +85,7 @@ class OpenMediaVaultAPI(object):
     # ---------------------------
     def connection_check(self) -> bool:
         """Check if API is connected."""
-        if not self._connected or not self._connection:
+        if not self._connected or self._connection is None:
             if self._connection_epoch > time() - self._connection_retry_sec:
                 return False
 
@@ -119,102 +121,52 @@ class OpenMediaVaultAPI(object):
     #   connect
     # ---------------------------
     def connect(self) -> bool:
-        """Connect API."""
         self.error = None
         self._connected = False
         self._connection_epoch = time()
-        self._connection = requests.Session()
-        self._cookie_jar = requests.cookies.RequestsCookieJar()
+        
+        # No cookies
+        self._connection = requests.Session() 
+        
+        # OMV 7 standard header
+        self._connection.headers.update({
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+        })
 
-        # Load cookies
-        if cookies := load_cookies(self._cookie_jar_file):
-            self._connection.cookies.update(cookies)
-
-        self.lock.acquire()
-        error = False
         try:
+            _LOGGER.debug("Try login to OMV 7 at %s", self._resource)
             response = self._connection.post(
                 self._resource,
-                data=json.dumps(
-                    {
-                        "service": "session",
-                        "method": "login",
-                        "params": {
-                            "username": self._username,
-                            "password": self._password,
-                        },
-                    }
-                ),
+                timeout=10,
+                headers={
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Referer": f"{self._protocol}://{self._host}/",
+                    "Origin": f"{self._protocol}://{self._host}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "service": "Session",
+                    "method": "login",
+                    "params": {
+                        "username": self._username,
+                        "password": self._password,
+                    },
+                },
                 verify=self._ssl_verify,
             )
 
-            if response.status_code != 200:
-                error = True
-
             data = response.json()
-            if data["error"] is not None:
-                if not self.connection_error_reported:
-                    _LOGGER.error(
-                        "OpenMediaVault %s unable to connect: %s",
-                        self._host,
-                        data["error"]["message"],
-                    )
-                    self.connection_error_reported = True
-
-                self.error_to_strings("%s" % data["error"]["message"])
-                self._connection = None
-                self.lock.release()
-                return False
-
-            if not data["response"]["authenticated"]:
-                _LOGGER.error("OpenMediaVault %s authenticated failed", self._host)
-                self.error_to_strings()
-                self._connection = None
-                self.lock.release()
-                return False
-
-        except requests.exceptions.ConnectionError as api_error:
-            error = True
-            self.error_to_strings("%s" % api_error)
-            self._connection = None
-        except Exception:
-            error = True
-        else:
-            if self.connection_error_reported:
-                _LOGGER.warning("OpenMediaVault %s reconnected", self._host)
-                self.connection_error_reported = False
+            if data.get("response") and data["response"].get("authenticated"):
+                self._connected = True
+                _LOGGER.info("Successfully connected to OMV 7 (Host: %s)", self._host)
+                return True
             else:
-                _LOGGER.debug("OpenMediaVault %s connected", self._host)
-
-            self._connected = True
-            self._reconnected = True
-            self.lock.release()
-            for cookie in self._connection.cookies:
-                self._cookie_jar.set_cookie(cookie)
-
-            save_cookies(self._cookie_jar_file, self._cookie_jar)
-
-        # Socket errors
-        if error:
-            try:
-                errorcode = response.status_code
-            except Exception:
-                errorcode = "no_respose"
-
-            if errorcode == 200:
-                errorcode = "cannot_connect"
-
-            _LOGGER.warning(
-                "OpenMediaVault %s connection error: %s", self._host, errorcode
-            )
-
-            error_code = errorcode
-            self.error = error_code
-            self._connected = False
-            self.disconnect("connect")
-            self.lock.release()
-
-        return self._connected
+                _LOGGER.error("Rejected OMV 7 login: %s", data.get("error"))
+                return False
+        except Exception as e:
+            _LOGGER.error("Error connecting to OMV 7: %s", e)
+            return False
 
     # ---------------------------
     #   error_to_strings
@@ -242,10 +194,16 @@ class OpenMediaVaultAPI(object):
         self,
         service: str,
         method: str,
-        params: dict[str, Any] | None = {},
-        options: dict[str, Any] | None = {"updatelastaccess": True},
+#        params: dict[str, Any] | None = {},
+#        options: dict[str, Any] | None = {"updatelastaccess": True},
+        params: dict[str, Any] | None = None,
+        options: dict[str, Any] | None = None,
     ) -> Optional(list):
         """Retrieve data from OMV."""
+        if params is None:
+            params = {}
+        if options is None:
+            options = {"updatelastaccess": True}
         if not self.connection_check():
             return None
 
@@ -262,14 +220,20 @@ class OpenMediaVaultAPI(object):
             )
             response = self._connection.post(
                 self._resource,
-                data=json.dumps(
+                timeout=10,
+                headers={
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Referer": f"{self._protocol}://{self._host}/",
+                    "Origin": f"{self._protocol}://{self._host}",
+                    "Content-Type": "application/json",
+                },
+                json=
                     {
                         "service": service,
                         "method": method,
                         "params": params,
                         "options": options,
-                    }
-                ),
+                    },
                 verify=self._ssl_verify,
             )
 

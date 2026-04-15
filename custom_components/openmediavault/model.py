@@ -67,7 +67,9 @@ def model_update_items(
     def _register_entity(_sensors, _item_id, _uid, _uid_sensor):
         _LOGGER.debug("Updating entity %s", _item_id)
         if _item_id in _sensors:
-            if _sensors[_item_id].enabled:
+#            if _sensors[_item_id].enabled:
+            # only update if entity_id exists
+            if getattr(_sensors[_item_id], "entity_id", None):
                 _sensors[_item_id].async_schedule_update_ha_state()
             return None
 
@@ -139,12 +141,13 @@ class OMVEntity:
         self._ctrl = omv_controller
         self._attr_extra_state_attributes = {ATTR_ATTRIBUTION: ATTRIBUTION}
         self._uid = uid
+
+    @property
+    def _data(self) -> dict:
+        """Return the data for this entity."""
         if self._uid:
-            self._data = omv_controller.data[self.entity_description.data_path][
-                self._uid
-            ]
-        else:
-            self._data = omv_controller.data[self.entity_description.data_path]
+            return self._ctrl.data[self.entity_description.data_path][self._uid]
+        return self._ctrl.data[self.entity_description.data_path]
 
     @property
     def name(self) -> str:
@@ -177,7 +180,8 @@ class OMVEntity:
         dev_connection_value = f"{self._ctrl.name}_{self.entity_description.ha_group}"
         dev_group = self.entity_description.ha_group
         if self.entity_description.ha_group == "System":
-            dev_connection_value = self._ctrl.data["hwinfo"]["hostname"]
+            #dev_connection_value = self._ctrl.data["hwinfo"]["hostname"]
+            dev_connection_value = self._ctrl.data["hwinfo"].get("hostname", "unknown")
 
         if self.entity_description.ha_group.startswith("data__"):
             dev_group = self.entity_description.ha_group[6:]
@@ -200,7 +204,7 @@ class OMVEntity:
                 identifiers={(dev_connection, f"{dev_connection_value}")},
                 name=f"{self._inst} {dev_group}",
                 manufacturer="OpenMediaVault",
-                sw_version=f"{self._ctrl.data['hwinfo']['version']}",
+                sw_version=f"{self._ctrl.data['hwinfo'].get('version', 'unknown')}",
                 configuration_url=f"http://{self._ctrl.config_entry.data[CONF_HOST]}",
             )
         else:
@@ -208,7 +212,7 @@ class OMVEntity:
                 connections={(dev_connection, f"{dev_connection_value}")},
                 default_name=f"{self._inst} {dev_group}",
                 default_manufacturer="OpenMediaVault",
-                via_device=(DOMAIN, f"{self._ctrl.data['hwinfo']['hostname']}"),
+                via_device=(DOMAIN, f"{self._ctrl.data['hwinfo'].get('hostname', 'unknown')}"),
             )
 
     @property
